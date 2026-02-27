@@ -1,0 +1,99 @@
+{
+    "name": "faah",
+    "displayName": "Faah Error Sound",
+    "description": "Play a satisfying 'faah' sound when errors occur in your code, terminal, or tasks",
+    "version": "0.1.0",
+    "publisher": "dev",
+    "engines": {
+        "vscode": "^1.109.0"
+    },
+    "categories": [
+        "Other",
+        "Debuggers"
+    ],
+    "keywords": [
+        "sound",
+        "error",
+        "notification",
+        "audio"
+    ],
+    "icon": "media/icon.png",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/yourusername/faah"
+    },
+    "activationEvents": [
+        "*"
+    ],
+    "enabledApiProposals": [
+        "terminalDataWriteEvent"
+    ],
+    "main": "./dist/extension.js",
+    "contributes": {
+        "configuration": {
+            "title": "Faah Error Sound",
+            "properties": {
+                "faah.enabled": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable/disable the error sound"
+                },
+                "faah.volume": {
+                    "type": "number",
+                    "default": 100,
+                    "minimum": 0,
+                    "maximum": 100,
+                    "description": "Volume level for the error sound (0-100)"
+                },
+                "faah.cooldown": {
+                    "type": "number",
+                    "default": 1500,
+                    "minimum": 0,
+                    "description": "Cooldown period in milliseconds between sounds"
+                },
+                "faah.onDiagnosticErrors": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Play sound on code diagnostics errors"
+                },
+                "faah.onTaskErrors": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Play sound on task exit errors"
+                },
+                "faah.onTerminalErrors": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Play sound on terminal error patterns"
+                }
+            }
+        }
+    },
+    "scripts": {
+        "vscode:prepublish": "npm run package",
+        "compile": "webpack",
+        "watch": "webpack --watch",
+        "package": "webpack --mode production --devtool hidden-source-map",
+        "compile-tests": "tsc -p . --outDir out",
+        "watch-tests": "tsc -p . -w --outDir out",
+        "pretest": "npm run compile-tests && npm run compile && npm run lint",
+        "lint": "eslint src",
+        "test": "vscode-test"
+    },
+    "devDependencies": {
+        "@types/mocha": "^10.0.10",
+        "@types/node": "^22.19.13",
+        "@types/vscode": "^1.109.0",
+        "@vscode/test-cli": "^0.0.12",
+        "@vscode/test-electron": "^2.5.2",
+        "eslint": "^9.39.2",
+        "ts-loader": "^9.5.4",
+        "typescript": "^5.9.3",
+        "typescript-eslint": "^8.54.0",
+        "webpack": "^5.104.1",
+        "webpack-cli": "^6.0.1"
+    },
+    "dependencies": {
+        "play-sound": "^1.1.6"
+    }
+}
