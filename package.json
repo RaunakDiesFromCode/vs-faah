@@ -23,7 +23,7 @@
         "url": "https://github.com/yourusername/faah"
     },
     "activationEvents": [
-        "*"
+        "onView:faahView"
     ],
     "enabledApiProposals": [
         "terminalDataWriteEvent"
@@ -67,6 +67,15 @@
                     "description": "Play sound on terminal error patterns"
                 }
             }
+        },
+        "views": {
+            "explorer": [
+                {
+                    "id": "faahView",
+                    "name": "Faah",
+                    "type": "webview"
+                }
+            ]
         }
     },
     "scripts": {

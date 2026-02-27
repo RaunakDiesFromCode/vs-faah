@@ -11,17 +11,30 @@ interface ErrorSoundConfig {
     onTerminalErrors: boolean;
 }
 
+let config: ErrorSoundConfig;
 let lastErrorCount = 0;
 let lastPlayTime = 0;
 let isPlaying = false;
-let config: ErrorSoundConfig;
+let faahViewProvider: FaahViewProvider;
 
 const player = require("play-sound")({}) as {
     play: (soundPath: string, cb: (err?: unknown) => void) => void;
 };
 
-export function activate(context: vscode.ExtensionContext) {
+/* =========================
+   ACTIVATE
+========================= */
+
+export async function activate(context: vscode.ExtensionContext) {
     loadConfiguration();
+
+    await maybePromptShellIntegration(context);
+
+    faahViewProvider = new FaahViewProvider(context);
+
+    context.subscriptions.push(
+        vscode.window.registerWebviewViewProvider("faahView", faahViewProvider),
+    );
 
     context.subscriptions.push(
         vscode.workspace.onDidChangeConfiguration((event) => {
@@ -31,20 +44,14 @@ export function activate(context: vscode.ExtensionContext) {
         }),
     );
 
-    // =========================
-    // Diagnostic Errors
-    // =========================
     context.subscriptions.push(
         vscode.languages.onDidChangeDiagnostics(() => {
             if (config.enabled && config.onDiagnosticErrors) {
-                checkDiagnostics(context);
+                checkDiagnostics();
             }
         }),
     );
 
-    // =========================
-    // Task Failures
-    // =========================
     context.subscriptions.push(
         vscode.tasks.onDidEndTaskProcess((event) => {
             if (
@@ -53,63 +60,103 @@ export function activate(context: vscode.ExtensionContext) {
                 event.exitCode !== undefined &&
                 event.exitCode !== 0
             ) {
-                triggerSound(context, "task");
+                triggerError("task");
             }
         }),
     );
 
-    // =========================
-    // TERMINAL SHELL EXECUTION (REAL SOLUTION)
-    // =========================
     context.subscriptions.push(
         vscode.window.onDidEndTerminalShellExecution(async (event) => {
             if (!config.enabled || !config.onTerminalErrors) return;
 
-            const exitCode = event.exitCode;
-
-            // 1️⃣ Trigger on non-zero exit
-            if (exitCode !== 0) {
-                triggerSound(context, "terminal-exit");
+            if (event.exitCode !== 0) {
+                triggerError("terminal-exit");
                 return;
             }
 
-            // 2️⃣ Also scan output text
-            if (event.execution.read) {
-                let fullOutput = "";
+            if (!event.execution.read) return;
 
-                for await (const chunk of event.execution.read()) {
-                    fullOutput += chunk;
-                }
+            let output = "";
+            for await (const chunk of event.execution.read()) {
+                output += chunk;
+            }
 
-                if (containsErrorText(fullOutput)) {
-                    triggerSound(context, "terminal-output");
-                }
+            if (containsErrorText(output)) {
+                triggerError("terminal-output");
             }
         }),
     );
 
-    checkDiagnostics(context);
+    checkDiagnostics();
 }
+
+/* =========================
+   SHELL PROMPT
+========================= */
+
+async function maybePromptShellIntegration(context: vscode.ExtensionContext) {
+    const terminalConfig = vscode.workspace.getConfiguration(
+        "terminal.integrated",
+    );
+    const isEnabled = terminalConfig.get<boolean>(
+        "shellIntegration.enabled",
+        false,
+    );
+
+    if (isEnabled) return;
+
+    const PROMPT_INTERVAL = 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    const lastPrompt = context.globalState.get<number>(
+        "faah.lastShellPrompt",
+        0,
+    );
+
+    if (now - lastPrompt < PROMPT_INTERVAL) return;
+
+    const choice = await vscode.window.showWarningMessage(
+        "Faah requires Terminal Shell Integration for accurate terminal error detection.",
+        "Enable",
+        "Later",
+    );
+
+    await context.globalState.update("faah.lastShellPrompt", now);
+
+    if (choice === "Enable") {
+        await terminalConfig.update(
+            "shellIntegration.enabled",
+            true,
+            vscode.ConfigurationTarget.Global,
+        );
+    }
+}
+
+/* =========================
+   CONFIG
+========================= */
 
 function loadConfiguration() {
     const settings = vscode.workspace.getConfiguration("faah");
 
     config = {
-        enabled: settings.get<boolean>("enabled", true),
-        volume: settings.get<number>("volume", 100),
-        cooldown: settings.get<number>("cooldown", 1500),
-        onDiagnosticErrors: settings.get<boolean>("onDiagnosticErrors", true),
-        onTaskErrors: settings.get<boolean>("onTaskErrors", true),
-        onTerminalErrors: settings.get<boolean>("onTerminalErrors", true),
+        enabled: settings.get("enabled", true),
+        volume: settings.get("volume", 100),
+        cooldown: settings.get("cooldown", 1500),
+        onDiagnosticErrors: settings.get("onDiagnosticErrors", true),
+        onTaskErrors: settings.get("onTaskErrors", true),
+        onTerminalErrors: settings.get("onTerminalErrors", true),
     };
 }
 
-function checkDiagnostics(context: vscode.ExtensionContext) {
-    const diagnostics = vscode.languages.getDiagnostics();
+/* =========================
+   DIAGNOSTICS
+========================= */
+
+function checkDiagnostics() {
     let errorCount = 0;
 
-    for (const [, diagnosticArray] of diagnostics) {
-        for (const d of diagnosticArray) {
+    for (const [, diagnostics] of vscode.languages.getDiagnostics()) {
+        for (const d of diagnostics) {
             if (d.severity === vscode.DiagnosticSeverity.Error) {
                 errorCount++;
             }
@@ -117,41 +164,58 @@ function checkDiagnostics(context: vscode.ExtensionContext) {
     }
 
     if (errorCount > 0 && errorCount !== lastErrorCount) {
-        triggerSound(context, "diagnostic");
+        triggerError("diagnostic");
     }
 
     lastErrorCount = errorCount;
 }
 
-// =========================
-// Error Keyword Detection
-// =========================
+/* =========================
+   ERROR TEXT MATCH
+========================= */
 
 const errorRegex =
-    /\berror\b|\bfailed\b|\bfatal\b|\bexception\b|\btraceback\b|\bpanic\b|command not found/i;
+    /\b(error|failed|fatal|exception|traceback|panic|segmentation fault|permission denied|command not found)\b/i;
 
 function containsErrorText(text: string): boolean {
     return errorRegex.test(text);
 }
 
-// =========================
-// Sound Logic
-// =========================
+/* =========================
+   TRIGGER
+========================= */
 
-function triggerSound(context: vscode.ExtensionContext, source: string) {
+function triggerError(source: string) {
     const now = Date.now();
 
     if (now - lastPlayTime < config.cooldown) return;
     if (isPlaying) return;
 
     lastPlayTime = now;
-    playFaah(context, source);
+
+    playFaah(source);
+
+    if (faahViewProvider) {
+        faahViewProvider.setErrorState(true);
+
+        setTimeout(() => {
+            faahViewProvider.setErrorState(false);
+        }, 2000);
+    }
 }
 
-function playFaah(context: vscode.ExtensionContext, source: string) {
+/* =========================
+   SOUND
+========================= */
+
+function playFaah(source: string) {
     isPlaying = true;
 
-    const soundPath = path.join(context.extensionPath, "media", "faah.mp3");
+    const soundPath = path.join(
+        faahViewProvider.context.extensionPath,
+        "media",
+        "faah.mp3",
+    );
 
     if (!fs.existsSync(soundPath)) {
         vscode.window.showWarningMessage(
@@ -169,6 +233,77 @@ function playFaah(context: vscode.ExtensionContext, source: string) {
         }
         isPlaying = false;
     });
+}
+
+/* =========================
+   SIDEBAR VIEW
+========================= */
+
+class FaahViewProvider implements vscode.WebviewViewProvider {
+    public static readonly viewType = "faahView";
+    public readonly context: vscode.ExtensionContext;
+    private _view?: vscode.WebviewView;
+
+    constructor(context: vscode.ExtensionContext) {
+        this.context = context;
+    }
+
+    resolveWebviewView(webviewView: vscode.WebviewView) {
+        this._view = webviewView;
+
+        webviewView.webview.options = {
+            enableScripts: false,
+            localResourceRoots: [
+                vscode.Uri.file(path.join(this.context.extensionPath, "media")),
+            ],
+        };
+
+        this.setErrorState(false);
+    }
+
+    public setErrorState(hasError: boolean) {
+        if (!this._view) return;
+
+        if (!hasError) {
+            this._view.webview.html = `
+                <!DOCTYPE html>
+                <html>
+                <body style="
+                    margin:0;
+                    padding:15px;
+                    background: var(--vscode-sideBar-background);
+                    color: var(--vscode-editor-foreground);
+                    font-family: sans-serif;
+                    text-align:center;
+                ">
+                    <h3 style="margin:0;">✅ No errors detected</h3>
+                    <p style="opacity:0.7;">Everything looks clean.</p>
+                </body>
+                </html>
+            `;
+            return;
+        }
+
+        const imagePath = vscode.Uri.file(
+            path.join(this.context.extensionPath, "media", "faah.jpeg"),
+        );
+
+        const imageUri = this._view.webview.asWebviewUri(imagePath);
+
+        this._view.webview.html = `
+            <!DOCTYPE html>
+            <html>
+            <body style="
+                margin:0;
+                padding:10px;
+                background: var(--vscode-sideBar-background);
+                text-align:center;
+            ">
+                <img src="${imageUri}" style="max-width:100%;" />
+            </body>
+            </html>
+        `;
+    }
 }
 
 export function deactivate() {}
