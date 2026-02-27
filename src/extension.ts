@@ -85,6 +85,66 @@ export async function activate(context: vscode.ExtensionContext) {
                 triggerError("terminal-output");
             }
         }),
+	);
+
+	context.subscriptions.push(
+        vscode.commands.registerCommand("faah.toggleEnabled", async () => {
+            const settings = vscode.workspace.getConfiguration("faah");
+            const current = settings.get<boolean>("enabled", true);
+            await settings.update(
+                "enabled",
+                !current,
+                vscode.ConfigurationTarget.Global,
+            );
+            vscode.window.showInformationMessage(
+                `Faah ${!current ? "Enabled" : "Disabled"}`,
+            );
+        }),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand("faah.toggleDiagnostics", async () => {
+            const settings = vscode.workspace.getConfiguration("faah");
+            const current = settings.get<boolean>("onDiagnosticErrors", true);
+            await settings.update(
+                "onDiagnosticErrors",
+                !current,
+                vscode.ConfigurationTarget.Global,
+            );
+            vscode.window.showInformationMessage(
+                `Faah Diagnostic Errors ${!current ? "Enabled" : "Disabled"}`,
+            );
+        }),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand("faah.toggleTasks", async () => {
+            const settings = vscode.workspace.getConfiguration("faah");
+            const current = settings.get<boolean>("onTaskErrors", true);
+            await settings.update(
+                "onTaskErrors",
+                !current,
+                vscode.ConfigurationTarget.Global,
+            );
+            vscode.window.showInformationMessage(
+                `Faah Task Errors ${!current ? "Enabled" : "Disabled"}`,
+            );
+        }),
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand("faah.toggleTerminal", async () => {
+            const settings = vscode.workspace.getConfiguration("faah");
+            const current = settings.get<boolean>("onTerminalErrors", true);
+            await settings.update(
+                "onTerminalErrors",
+                !current,
+                vscode.ConfigurationTarget.Global,
+            );
+            vscode.window.showInformationMessage(
+                `Faah Terminal Errors ${!current ? "Enabled" : "Disabled"}`,
+            );
+        }),
     );
 
     checkDiagnostics();

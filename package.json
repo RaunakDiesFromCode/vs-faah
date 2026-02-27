@@ -30,6 +30,24 @@
     ],
     "main": "./dist/extension.js",
     "contributes": {
+        "commands": [
+            {
+                "command": "faah.toggleEnabled",
+                "title": "Faah: Toggle Extension"
+            },
+            {
+                "command": "faah.toggleDiagnostics",
+                "title": "Faah: Toggle Diagnostic Errors"
+            },
+            {
+                "command": "faah.toggleTasks",
+                "title": "Faah: Toggle Task Errors"
+            },
+            {
+                "command": "faah.toggleTerminal",
+                "title": "Faah: Toggle Terminal Errors"
+            }
+        ],
         "configuration": {
             "title": "Faah Error Sound",
             "properties": {
